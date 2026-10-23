@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="藥單 OCR 操作介面示範，圖片僅於瀏覽器內預覽。">
+  <title>藥單辨識工作台</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./"><span class="brand-icon" aria-hidden="true">✚</span> 藥單辨識工作台</a><span class="status"><i></i> 介面示範版</span></header>
+  <main>
+    <div class="intro"><p class="eyebrow">PRESCRIPTION WORKSPACE</p><h1>從一張藥單，<br class="mobile-break">整理用藥資訊。</h1><p>選取或拍攝藥單，預覽圖片與結構化結果的操作流程。</p></div>
+    <aside class="notice"><span aria-hidden="true">ⓘ</span><p><strong>目前為介面示範，尚未串接 OCR。</strong> 結果為固定示範資料，與上傳圖片無關；圖片僅保留在此瀏覽器中，不會上傳。</p></aside>
+    <div class="workspace">
+      <section class="card upload-card" aria-labelledby="upload-title">
+        <div class="section-heading"><div><span class="step">01</span><h2 id="upload-title">匯入藥單</h2></div><button id="reset" class="text-button" type="button">重設</button></div>
+        <div id="drop-zone" class="drop-zone">
+          <div id="placeholder"><div class="upload-icon" aria-hidden="true">↥</div><h3>將藥單圖片放到這裡</h3><p>拖曳圖片，或使用下方按鈕選取</p><span class="format">JPG、PNG、WebP</span></div>
+          <img id="preview" alt="所選藥單圖片預覽" hidden>
+        </div>
+        <p id="file-name" class="file-name">尚未選取圖片</p>
+        <div class="upload-actions"><button id="choose" class="secondary" type="button">選取圖片</button><button id="camera" class="secondary" type="button">拍攝藥單</button></div>
+        <input id="file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <input id="camera-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+        <button id="recognize" class="primary" type="button">顯示示範辨識結果 <span aria-hidden="true">→</span></button>
+        <p id="message" class="message" role="status" aria-live="polite">請先選取一張藥單圖片。</p>
+      </section>
+      <section class="card result-card" aria-labelledby="result-title">
+        <div class="section-heading"><div><span class="step">02</span><h2 id="result-title">辨識結果</h2></div><span class="badge">示範資料</span></div>
+        <div id="empty-result" class="empty-result"><span aria-hidden="true">▤</span><h3>用藥資訊將顯示於此</h3><p>選取圖片後，點選「顯示示範辨識結果」，<br>體驗藥單資訊的呈現方式。</p></div>
+        <div id="result" hidden>
+          <p class="result-note">以下為固定示範內容，並非圖片的實際辨識結果。</p>
+          <dl class="summary"><div><dt>姓名</dt><dd>示範使用者</dd></div><div><dt>藥盤</dt><dd>2 號</dd></div><div><dt>開始日期</dt><dd>2026-10-23</dd></div><div><dt>領藥天數</dt><dd>3 天</dd></div></dl>
+          <h3 class="list-title">藥品清單 <span>2 項示範</span></h3>
+          <div class="medication"><span class="med-index">01</span><div><h4>示範藥品 A</h4><p>每次 1 錠 · 每日 3 次 · 飯後</p><small>3 天份 · 總數量 9 錠</small></div></div>
+          <div class="medication"><span class="med-index">02</span><div><h4>示範藥品 B</h4><p>每次 1 錠 · 每日 1 次 · 睡前</p><small>3 天份 · 總數量 3 錠</small></div></div>
+          <details><summary>檢視示範 JSON</summary><button id="copy" class="secondary copy" type="button">複製 JSON</button><pre id="json" tabindex="0" aria-label="示範 JSON"></pre><p id="copy-status" role="status" aria-live="polite"></p></details>
+        </div>
+      </section>
+    </div>
+    <footer><span>圖片僅於瀏覽器內預覽</span><span>藥單 OCR · Prototype 01</span></footer>
+  </main>
+</body>
+</html>
