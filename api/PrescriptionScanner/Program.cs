@@ -64,6 +64,11 @@ namespace PrescriptionScanner
 
     public record PatientCandidate(string Name, int Similarity);
 
+    internal sealed class MultiplePrescriptionsException : Exception
+    {
+        public MultiplePrescriptionsException() : base("偵測到多個姓名欄位，請將上下藥單分開裁切，每次上傳一位病患的藥單。") { }
+    }
+
     class Program
     {
         private static readonly object PaddleOcrLock = new();
@@ -76,6 +81,11 @@ namespace PrescriptionScanner
 
         static void Main(string[] args)
         {
+            if (args.Contains("--serve"))
+            {
+                OcrWebServer.Run(args.Where(arg => arg != "--serve").ToArray());
+                return;
+            }
             // 執行檔的工作目錄不一定是專案目錄，因此預設從輸出目錄讀取圖片。
             // 也可將圖片完整路徑當作第一個命令列參數傳入。
             // 多張圖片在同一個程序處理，沿用 Python worker，避免逐張重新載入模型。
@@ -109,7 +119,7 @@ namespace PrescriptionScanner
             }
         }
 
-        public static string ParsePrescription(string imgPath, int tray)
+        public static string ParsePrescription(string imgPath, int tray, string profile = "original")
         {
             if (string.IsNullOrWhiteSpace(imgPath) || !File.Exists(imgPath))
             {
@@ -118,7 +128,12 @@ namespace PrescriptionScanner
                     imgPath);
             }
 
-            var recognizedTexts = RecognizeTextWithPaddleOcr(imgPath);
+            if (profile is not ("original" or "fast")) throw new ArgumentException("不支援的辨識模式。", nameof(profile));
+            var recognizedTexts = RecognizeTextWithPaddleOcr(imgPath, profile);
+            // The current response represents exactly one patient. Do not merge
+            // medication rows from multiple prescription sections into that record.
+            if (recognizedTexts.Sum(text => Regex.Matches(text, @"姓\s*名\s*[:：]").Count) > 1)
+                throw new MultiplePrescriptionsException();
             string recognizedText = string.Join(Environment.NewLine, recognizedTexts);
 
             var record = new PrescriptionModel { Tray = tray };
@@ -200,7 +215,17 @@ namespace PrescriptionScanner
             return JsonSerializer.Serialize(record, options);
         }
 
-        private static IReadOnlyList<string> RecognizeTextWithPaddleOcr(string imagePath)
+        internal static void WarmUpOcr()
+        {
+            string scriptPath = Path.Combine(AppContext.BaseDirectory, "tools", "paddle_ocr_to_json.py");
+            string pythonPath = Environment.GetEnvironmentVariable("PADDLE_OCR_PYTHON")
+                ?? @"C:\ocr-tools\.venv313\Scripts\python.exe";
+            if (!File.Exists(scriptPath) || !File.Exists(pythonPath))
+                throw new FileNotFoundException("找不到 PaddleOCR 的 Python 或腳本。");
+            lock (PaddleOcrLock) EnsurePaddleOcrWorker(pythonPath, scriptPath, warmup: true);
+        }
+
+        private static IReadOnlyList<string> RecognizeTextWithPaddleOcr(string imagePath, string profile)
         {
             string scriptPath = Path.Combine(AppContext.BaseDirectory, "tools", "paddle_ocr_to_json.py");
             if (!File.Exists(scriptPath))
@@ -220,7 +245,7 @@ namespace PrescriptionScanner
             lock (PaddleOcrLock)
             {
                 EnsurePaddleOcrWorker(pythonPath, scriptPath);
-                paddleOcrWorker!.StandardInput.WriteLine(JsonSerializer.Serialize(new { image = imagePath }));
+                paddleOcrWorker!.StandardInput.WriteLine(JsonSerializer.Serialize(new { image = imagePath, profile }));
                 paddleOcrWorker.StandardInput.Flush();
 
                 using var response = ReadPaddleOcrResponse(paddleOcrWorker, "result");
@@ -238,7 +263,7 @@ namespace PrescriptionScanner
             }
         }
 
-        private static void EnsurePaddleOcrWorker(string pythonPath, string scriptPath)
+        private static void EnsurePaddleOcrWorker(string pythonPath, string scriptPath, bool warmup = false)
         {
             if (paddleOcrWorker is not null && !paddleOcrWorker.HasExited) return;
 
@@ -256,11 +281,17 @@ namespace PrescriptionScanner
             };
             startInfo.ArgumentList.Add(scriptPath);
             startInfo.ArgumentList.Add("--worker");
+            if (warmup) startInfo.ArgumentList.Add("--warmup");
 
             paddleOcrWorker = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("無法啟動 PaddleOCR。");
             _ = paddleOcrWorker.StandardError.ReadToEndAsync();
             using var ready = ReadPaddleOcrResponse(paddleOcrWorker, "ready");
+            if (ready.RootElement.GetProperty("type").GetString() == "error")
+            {
+                StopPaddleOcrWorker();
+                throw new InvalidOperationException("PaddleOCR 模型初始化失敗。");
+            }
         }
 
         private static JsonDocument ReadPaddleOcrResponse(Process process, string expectedType)
@@ -271,6 +302,7 @@ namespace PrescriptionScanner
                 Task<string?> readLineTask = process.StandardOutput.ReadLineAsync();
                 if (!readLineTask.Wait(timeoutMilliseconds))
                 {
+                    StopPaddleOcrWorker();
                     throw new TimeoutException("PaddleOCR 辨識逾時。");
                 }
 
@@ -425,7 +457,7 @@ namespace PrescriptionScanner
 
         private static List<MedicationModel> FindMedications(IEnumerable<string> recognizedTexts)
         {
-            const string dosePattern = @"(?<!\d)(?<amount>\d+(?:[．﹒，,]\d+)?)\s*[.．﹒，,]?\s*(?<unit>[錠包粒片顆])";
+            const string dosePattern = @"(?<![\d.．﹒，,])(?<amount>\d+(?:[.．﹒，,]\d+)?)\s*[.．﹒，,]?\s*(?<unit>[錠锭包粒片顆颗])";
             const string timingPattern = @"早餐後吃|午餐後吃|晚餐後吃|睡前|飯前|飯後";
             var medications = new List<MedicationModel>();
             var pendingNames = new List<string>();
@@ -439,10 +471,16 @@ namespace PrescriptionScanner
                 Match doseMatch = Regex.Match(text, dosePattern);
                 if (doseMatch.Success)
                 {
+                    // Lightweight OCR often emits a complete table row as one line.
+                    // Preserve the drug name before the dose instead of dropping it.
+                    string inlineName = text[..doseMatch.Index].Trim();
+                    inlineName = Regex.Replace(inlineName, @"\s*(?:內服|内服|外用)\s*$", "").Trim();
+                    if (IsMedicationName(inlineName)) pendingNames.Add(inlineName);
+                    string unit = doseMatch.Groups["unit"].Value.Replace('锭', '錠').Replace('颗', '顆');
                     current = new MedicationModel
                     {
                         Name = pendingNames.Count == 0 ? null : string.Join(" ", pendingNames),
-                        Dose = $"{Regex.Replace(doseMatch.Groups["amount"].Value, "[．﹒，,]", ".")} {doseMatch.Groups["unit"].Value}"
+                        Dose = $"{Regex.Replace(doseMatch.Groups["amount"].Value, "[．﹒，,]", ".")} {unit}"
                     };
                     medications.Add(current);
                     pendingNames.Clear();
