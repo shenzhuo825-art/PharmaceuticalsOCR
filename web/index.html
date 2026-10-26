@@ -23,7 +23,8 @@
         <p id="file-name" class="file-name">尚未選取圖片</p>
         <div class="upload-actions"><button id="choose" class="secondary" type="button">選取圖片</button><button id="camera" class="secondary" type="button">拍攝藥單</button></div>
         <input id="file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-        <input id="camera-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+        <input id="camera-file" type="file" accept="image/*" hidden>
+        <p class="file-name">iPhone：點「拍攝藥單」後選擇「拍照」。若相機黑畫面，可先用相機 App 拍照，再按「選取圖片」。</p>
         <button id="recognize" class="primary" type="button">顯示示範辨識結果 <span aria-hidden="true">→</span></button>
         <p id="message" class="message" role="status" aria-live="polite">請先選取一張藥單圖片。</p>
       </section>

@@ -32,7 +32,8 @@ powershell -ExecutionPolicy Bypass -File .\web\start.ps1 -Port 8081
 
 ## 使用
 
-- 選取或拖曳 JPG、PNG、WebP，或在手機點「拍攝藥單」。相機入口依手機及瀏覽器支援情況啟動系統相機或檔案選擇器，不使用需要 HTTPS 的即時鏡頭串流。
+- 選取或拖曳 JPG、PNG、WebP，或在手機點「拍攝藥單」。拍攝入口使用 `accept="image/*"`，不指定 `capture` 或鏡頭方向，讓瀏覽器提供拍照／照片圖庫選單；選單依裝置而異。在 iPhone 選擇「拍照」，若仍為黑畫面，先用相機 App 拍照再回網頁選圖。不使用需要 HTTPS 的即時鏡頭串流。此調整仍需 iPhone Safari 實機確認；不保證解決系統相機介面的黑畫面。
+- 目前支援 JPG、PNG、WebP；HEIC 會顯示轉成 JPG 的提示。
 - 圖片預覽後點「顯示示範辨識結果」。姓名、藥盤、日期、天數及藥品內容均為示範，與圖片無關。
 - 展開「檢視示範 JSON」可檢視或複製現有 OCR 欄位格式。
 - 區域網路 HTTP 瀏覽器可能禁止剪貼簿 API，複製失敗時會選取 JSON 並提示手動複製。

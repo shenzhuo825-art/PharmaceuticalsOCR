@@ -34,7 +34,7 @@ function selectFile(file) {
   clearResult();
   clearImage();
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    message("不支援此檔案，請選取 JPG、PNG 或 WebP 圖片。", true);
+    message("不支援此檔案，請選取 JPG、PNG 或 WebP 圖片。若為 iPhone HEIC 照片，請先轉成 JPG 再選取。", true);
     return;
   }
   const url = URL.createObjectURL(file);
