@@ -78,21 +78,28 @@ namespace PrescriptionScanner
         {
             // 執行檔的工作目錄不一定是專案目錄，因此預設從輸出目錄讀取圖片。
             // 也可將圖片完整路徑當作第一個命令列參數傳入。
-            string imagePath = args.Length > 0
-                ? Path.GetFullPath(args[0])
-                : Path.Combine(AppContext.BaseDirectory, "S__36208690.jpg");
+            // 多張圖片在同一個程序處理，沿用 Python worker，避免逐張重新載入模型。
+            string[] imagePaths = args.Length > 0
+                ? args.Select(Path.GetFullPath).ToArray()
+                : [Path.Combine(AppContext.BaseDirectory, "S__36208690.jpg")];
             int assignedTray = 2; // 設定對應的藥盤編號
 
-            try
+            foreach (string imagePath in imagePaths)
             {
-                Console.WriteLine($"讀取圖片：{imagePath}");
-                string jsonOutput = ParsePrescription(imagePath, assignedTray);
-                Console.WriteLine("=== 辨識成功，產生的交接 JSON ===");
-                Console.WriteLine(jsonOutput);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"辨識失敗：{ex.Message}");
+                var elapsed = Stopwatch.StartNew();
+                try
+                {
+                    Console.WriteLine($"讀取圖片：{imagePath}");
+                    string jsonOutput = ParsePrescription(imagePath, assignedTray);
+                    Console.WriteLine("=== 辨識成功，產生的交接 JSON ===");
+                    Console.WriteLine(jsonOutput);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"辨識失敗：{ex.Message}");
+                    Environment.ExitCode = 1;
+                }
+                Console.WriteLine($"處理耗時：{elapsed.Elapsed.TotalSeconds:F2} 秒");
             }
 
             if (!Console.IsInputRedirected)

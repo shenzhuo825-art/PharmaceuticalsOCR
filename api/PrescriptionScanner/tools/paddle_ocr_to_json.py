@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-import tempfile
 from pathlib import Path
 
 from paddleocr import PaddleOCR
@@ -24,8 +24,12 @@ sys.stderr.reconfigure(encoding="utf-8")
 def create_ocr() -> PaddleOCR:
     # Keep the high-accuracy OCR pipeline but skip unused document preprocessing.
     # MKL-DNN is disabled because it causes an incompatibility on this Windows setup.
+    threads = int(os.environ.get("PADDLE_OCR_CPU_THREADS", "10"))
+    if threads < 1:
+        raise ValueError("PADDLE_OCR_CPU_THREADS must be a positive integer")
     return PaddleOCR(
         device="cpu",
+        cpu_threads=threads,
         enable_mkldnn=False,
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
@@ -37,13 +41,14 @@ def recognize(ocr: PaddleOCR, image: Path) -> dict:
     if not image.is_file():
         raise FileNotFoundError(f"Image not found: {image.resolve()}")
 
-    # PaddleOCR v3 provides a stable JSON exporter. Keep using it so the one-shot
-    # command and the persistent worker return exactly the same schema.
-    with tempfile.TemporaryDirectory() as directory:
-        output = Path(directory) / "result.json"
-        for result in ocr.predict(str(image)):
-            result.save_to_json(str(output))
-        return json.loads(output.read_text(encoding="utf-8"))
+    # The public JSON property uses the same exporter as save_to_json, without
+    # creating, writing, reading and deleting a temporary file for every image.
+    data = None
+    for result in ocr.predict(str(image)):
+        data = result.json["res"]
+    if data is None:
+        raise RuntimeError("PaddleOCR returned no result")
+    return data
 
 
 def run_worker() -> None:
